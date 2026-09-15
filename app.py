@@ -11,8 +11,7 @@ try:
 except Exception:
     WEASYPRINT_AVAILABLE = False
 
-APP_VERSION = "v2.1.1 - Fix Team Names in Live Report"
-
+APP_VERSION = "v2.1.3 - PDF Lineup Fix"
 
 st.set_page_config(
     page_title=f"Matchcenter & Report ({APP_VERSION})",
@@ -178,11 +177,11 @@ def calculate_cards(events_info, home_team, away_team):
 def calculate_player_minutes(starters_h, subs_h, starters_a, subs_a, events_info, total_match_minutes, half_duration):
     players = {}
     def add_player(p, team_key, is_starter):
-        raw_name = str(p.get('name', '')).strip()
+        raw_name = str(p.get('name', '')).strip() if isinstance(p, dict) else str(p).strip()
         c_name = clean_player_name(raw_name)
         if not c_name:
             return
-        num = p.get('number', '')
+        num = p.get('number', '') if isinstance(p, dict) else ''
         key = f"{team_key}_{c_name.lower()}"
         players[key] = {
             'clean_name': c_name, 'number': num, 'team': team_key,
@@ -257,6 +256,25 @@ def extract_roster(team_data):
         starters = team_data
     return starters, substitutes
 
+def get_players_from_events(events_info, team_key):
+    """Fallback: haalt spelersnamen op uit de geregistreerde live events."""
+    found_players = set()
+    for ev in events_info:
+        if ev.get("marker"):
+            continue
+        if ev.get("team") == team_key and ev.get("player"):
+            p_name = clean_player_name(ev.get("player"))
+            if p_name:
+                found_players.add(p_name)
+        extra = str(ev.get("extra", ""))
+        if "In:" in extra and "Out:" in extra:
+            m_in = re.search(r'In:\s*([^\|]+)', extra)
+            m_out = re.search(r'Out:\s*([^\|]+)', extra)
+            if ev.get("team") == team_key:
+                if m_in: found_players.add(clean_player_name(m_in.group(1)))
+                if m_out: found_players.add(clean_player_name(m_out.group(1)))
+    return sorted(list(found_players))
+
 def generate_pdf_report(match_info, home_score, away_score, starters_h, subs_h, starters_a, subs_a, events_info, minutes_list, goalscorers_list, cards_list, simple_mode=False):
     home_team = match_info.get("home", "Thuisploeg")
     away_team = match_info.get("away", "Uitploeg")
@@ -282,6 +300,30 @@ def generate_pdf_report(match_info, home_score, away_score, starters_h, subs_h, 
             details_html = f"{clean_player_name(player_val)} {f'({extra_val})' if extra_val else ''}"
             events_html += f"<tr><td><b>{t_str}</b></td><td>{icon_html}{ev_name}{og}</td><td>{team_name}</td><td>{details_html}</td></tr>"
 
+    def render_player_list_html(players, fallback_team_key):
+        if players:
+            items = []
+            for p in players:
+                if isinstance(p, dict):
+                    num = f"#{p.get('number')} " if p.get('number') else ""
+                    name = clean_player_name(p.get('name'))
+                    items.append(f"{num}{name}")
+                else:
+                    items.append(clean_player_name(p))
+            return "<br>".join(items)
+        else:
+            # Fallback op event players
+            fallback_players = get_players_from_events(events_info, fallback_team_key)
+            if fallback_players:
+                return "<br>".join([f"• {p}" for p in fallback_players])
+            return "<i>Geen spelers opgegeven</i>"
+
+    home_starters_html = render_player_list_html(starters_h, "home")
+    home_subs_html = render_player_list_html(subs_h, "home") if subs_h else "<i>Geen wisselspelers</i>"
+
+    away_starters_html = render_player_list_html(starters_a, "away")
+    away_subs_html = render_player_list_html(subs_a, "away") if subs_a else "<i>Geen wisselspelers</i>"
+
     html_content = f"""
     <!DOCTYPE html>
     <html>
@@ -289,24 +331,50 @@ def generate_pdf_report(match_info, home_score, away_score, starters_h, subs_h, 
         <meta charset="utf-8">
         <style>
             @page {{ size: A4; margin: 15mm; }}
-            body {{ font-family: 'Helvetica', 'Arial', sans-serif; color: #333; }}
+            body {{ font-family: 'Helvetica', 'Arial', sans-serif; color: #333; margin: 0; padding: 0; }}
             .header {{ text-align: center; background-color: #1e1e2e; color: #fff; padding: 15px; border-radius: 8px; }}
             .score {{ font-size: 26px; font-weight: bold; margin: 5px 0; }}
+            .sub-info {{ font-size: 12px; color: #ccc; }}
             .section-title {{ font-size: 16px; font-weight: bold; border-bottom: 2px solid #2980b9; margin-top: 20px; padding-bottom: 5px; color: #2d2d3f; }}
+            .teams-table {{ width: 100%; margin-top: 10px; border-collapse: separate; border-spacing: 10px 0; }}
+            .team-box {{ width: 50%; vertical-align: top; background: #f8f9fa; padding: 12px; border-radius: 6px; border: 1px solid #ddd; font-size: 12px; }}
+            .team-box h3 {{ margin-top: 0; margin-bottom: 8px; color: #2980b9; font-size: 14px; }}
             table.data-table {{ width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 11px; }}
             table.data-table th, table.data-table td {{ border: 1px solid #ddd; padding: 6px 8px; text-align: left; }}
             table.data-table th {{ background-color: #2d2d3f; color: white; }}
+            .marker-row {{ background-color: #eaeded; text-align: center; }}
         </style>
     </head>
     <body>
         <div class="header">
             <div class="score">{home_team} {home_score} - {away_score} {away_team}</div>
-            <div>Datum: {match_date} | Categorie {category} | Wedstrijdvorm: {fmt_val}v{fmt_val}</div>
+            <div class="sub-info">Datum: {match_date} | Categorie {category} | Wedstrijdvorm: {fmt_val}v{fmt_val} | Speeltijd: 2x {half_duration} min</div>
         </div>
-        <div class="section-title">Wedstrijdverloop</div>
+
+        <div class="section-title">👥 Opstellingen</div>
+        <table class="teams-table">
+            <tr>
+                <td class="team-box">
+                    <h3>🏠 {home_team}</h3>
+                    <b>Basis / Geregistreerd:</b><br>{home_starters_html}<br><br>
+                    <b>Wissels:</b><br>{home_subs_html}
+                </td>
+                <td class="team-box">
+                    <h3>🚩 {away_team}</h3>
+                    <b>Basis / Geregistreerd:</b><br>{away_starters_html}<br><br>
+                    <b>Wissels:</b><br>{away_subs_html}
+                </td>
+            </tr>
+        </table>
+
+        <div class="section-title">📋 Wedstrijdverloop</div>
         <table class="data-table">
-            <thead><tr><th>Tijd</th><th>Gebeurtenis</th><th>Team</th><th>Speler / Details</th></tr></thead>
-            <tbody>{events_html}</tbody>
+            <thead>
+                <tr><th>Tijd</th><th>Gebeurtenis</th><th>Team</th><th>Speler / Details</th></tr>
+            </thead>
+            <tbody>
+                {events_html}
+            </tbody>
         </table>
     </body>
     </html>
@@ -333,7 +401,6 @@ def render_live_scoreboard(match_key):
         st.info("Wachten op de aftrap...")
         return
 
-    # Check of de wedstrijd afgelopen is (inclusief "Einde wedstrijd" marker check!)
     period = str(data.get('period', 1))
     status = str(data.get('status', '')).upper()
     events = data.get("events", [])
@@ -353,7 +420,6 @@ def render_live_scoreboard(match_key):
         st.session_state['match_finished'] = True
         st.rerun(scope="app")
 
-    # Render Live View
     st.markdown(f"<p style='text-align: right; color: #666; font-size: 11px;'>Versie: {APP_VERSION}</p>", unsafe_allow_html=True)
     st.markdown(f"<h4 style='text-align: center; color: #aaa;'>{data.get('date', '')} — Periode: {period}</h4>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns([2, 1.5, 2])
@@ -395,14 +461,12 @@ def render_live_scoreboard(match_key):
 def render_full_report(data):
     st.success("🏁 De wedstrijd is afgelopen! Het officiële wedstrijdrapport is hieronder beschikbaar.")
     
-    # Check zowel het 'match' blok (YAML) als de losse root-velden (live JSON)
     match_info = data.get("match", {})
     teams_info = data.get("teams", {})
     events_info = data.get("events", [])
 
     simple_mode = match_info.get("simple_mode", data.get("simple_mode", False))
     
-    # 🔧 FIX: Haal teamnamen en datum eerst op uit match_info, anders uit de root (live JSON)
     home_team = match_info.get("home") or data.get("home") or "Thuisploeg"
     away_team = match_info.get("away") or data.get("away") or "Uitploeg"
     match_date = match_info.get("date") or data.get("date") or "Onbekend"
@@ -420,7 +484,6 @@ def render_full_report(data):
     away_data = teams_info.get("away", {}) if isinstance(teams_info, dict) else data.get("away", [])
     starters_a, subs_a = extract_roster(away_data)
 
-    # Zorg dat de match_info dictionary ook de correcte teamnamen bevat voor de PDF generator
     match_info["home"] = home_team
     match_info["away"] = away_team
     match_info["date"] = match_date
@@ -502,24 +565,35 @@ def render_full_report(data):
         col_h, col_a = st.columns(2)
         with col_h:
             st.subheader(f"🏠 {home_team}")
-            st.markdown("**Begin-opstelling:**")
-            if starters_h:
+            if starters_h or subs_h:
+                st.markdown("**Begin-opstelling:**")
                 for p in starters_h: st.write(f"• #{p.get('number', '')} {clean_player_name(p.get('name', ''))}")
+                if subs_h:
+                    st.markdown("**Wissels:**")
+                    for p in subs_h: st.write(f"• #{p.get('number', '')} {clean_player_name(p.get('name', ''))}")
             else:
-                st.caption("Geen opstelling doorgegeven.")
-            if subs_h:
-                st.markdown("**Wissels:**")
-                for p in subs_h: st.write(f"• #{p.get('number', '')} {clean_player_name(p.get('name', ''))}")
+                event_players_h = get_players_from_events(events_info, "home")
+                if event_players_h:
+                    st.markdown("**Geregistreerde Spelers (uit verloop):**")
+                    for name in event_players_h: st.write(f"• {name}")
+                else:
+                    st.caption("Geen opstelling doorgegeven.")
+
         with col_a:
             st.subheader(f"🚩 {away_team}")
-            st.markdown("**Begin-opstelling:**")
-            if starters_a:
+            if starters_a or subs_a:
+                st.markdown("**Begin-opstelling:**")
                 for p in starters_a: st.write(f"• #{p.get('number', '')} {clean_player_name(p.get('name', ''))}")
+                if subs_a:
+                    st.markdown("**Wissels:**")
+                    for p in subs_a: st.write(f"• #{p.get('number', '')} {clean_player_name(p.get('name', ''))}")
             else:
-                st.caption("Geen opstelling doorgegeven.")
-            if subs_a:
-                st.markdown("**Wissels:**")
-                for p in subs_a: st.write(f"• #{p.get('number', '')} {clean_player_name(p.get('name', ''))}")
+                event_players_a = get_players_from_events(events_info, "away")
+                if event_players_a:
+                    st.markdown("**Geregistreerde Spelers (uit verloop):**")
+                    for name in event_players_a: st.write(f"• {name}")
+                else:
+                    st.caption("Geen opstelling doorgegeven.")
 
     with tab_stats:
         col_g, col_c = st.columns(2)
