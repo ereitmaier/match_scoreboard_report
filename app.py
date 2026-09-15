@@ -11,7 +11,7 @@ try:
 except Exception:
     WEASYPRINT_AVAILABLE = False
 
-APP_VERSION = "v2.0.0 - Live Scoreboard & Final Report Combo"
+APP_VERSION = "v2.1.0 - Auto FT Detection & Visible Version"
 
 st.set_page_config(
     page_title=f"Matchcenter & Report ({APP_VERSION})",
@@ -316,7 +316,7 @@ def generate_pdf_report(match_info, home_score, away_score, starters_h, subs_h, 
         return html_content.encode('utf-8')
 
 # -----------------------------------------------------------------------------
-# Weergave 1: Live Scoreboard Component (met Polling)
+# Weergave 1: Live Scoreboard Component (met Auto FT Detectie)
 # -----------------------------------------------------------------------------
 @st.fragment(run_every="5s")
 def render_live_scoreboard(match_key):
@@ -332,17 +332,28 @@ def render_live_scoreboard(match_key):
         st.info("Wachten op de aftrap...")
         return
 
-    # Check of de wedstrijd afgelopen is
+    # Check of de wedstrijd afgelopen is (inclusief "Einde wedstrijd" marker check!)
     period = str(data.get('period', 1))
     status = str(data.get('status', '')).upper()
-    is_finished = period in ["FT", "Eindsignaal", "Afgelopen"] or status in ["FT", "FINISHED", "ENDED"]
+    events = data.get("events", [])
+    
+    has_end_marker = any(
+        ev.get("marker") and str(ev.get("event")).strip() in ["Einde wedstrijd", "End of Match", "Einde reguliere speeltijd"]
+        for ev in events
+    )
+
+    is_finished = (
+        period in ["FT", "Eindsignaal", "Afgelopen"] 
+        or status in ["FT", "FINISHED", "ENDED"]
+        or has_end_marker
+    )
 
     if is_finished:
-        # Stop het fragment-polling interval zodra de wedstrijd afgelopen is!
         st.session_state['match_finished'] = True
-        st.rerun(scope="app")  # Rerun de hele app om naar de rapport-weergave over te schakelen
+        st.rerun(scope="app")
 
     # Render Live View
+    st.markdown(f"<p style='text-align: right; color: #666; font-size: 11px;'>Versie: {APP_VERSION}</p>", unsafe_allow_html=True)
     st.markdown(f"<h4 style='text-align: center; color: #aaa;'>{data.get('date', '')} — Periode: {period}</h4>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns([2, 1.5, 2])
     c1.markdown(f"<h2 style='text-align: right;'>{data.get('home')}</h2>", unsafe_allow_html=True)
@@ -351,7 +362,7 @@ def render_live_scoreboard(match_key):
 
     st.divider()
     st.subheader("⏱️ Live Wedstrijdverloop")
-    events = data.get("events", [])
+    
     if not events:
         st.write("Nog geen gebeurtenissen.")
         return
@@ -522,6 +533,13 @@ def render_full_report(data):
         st.code(yaml_string, language="yaml")
 
 # -----------------------------------------------------------------------------
+# Sidebar Configuratie & Versie
+# -----------------------------------------------------------------------------
+st.sidebar.title("⚽ TLU Matchcenter")
+st.sidebar.caption(f"🚀 **App Versie:** `{APP_VERSION}`")
+st.sidebar.markdown("---")
+
+# -----------------------------------------------------------------------------
 # Hoofd Routing & Logica
 # -----------------------------------------------------------------------------
 query_params = st.query_params
@@ -529,7 +547,6 @@ match_id = query_params.get("match", None)
 file_param = query_params.get("file", None)
 
 if match_id:
-    # 1. Check de status van de live-wedstrijd
     url = f"https://team-level-up.com/match-reporter/live_{match_id}.json"
     is_finished = st.session_state.get('match_finished', False)
     
@@ -540,12 +557,18 @@ if match_id:
                 match_json = res.json()
                 period = str(match_json.get('period', 1))
                 status = str(match_json.get('status', '')).upper()
-                if period in ["FT", "Eindsignaal", "Afgelopen"] or status in ["FT", "FINISHED", "ENDED"]:
+                events = match_json.get("events", [])
+                
+                has_end_marker = any(
+                    ev.get("marker") and str(ev.get("event")).strip() in ["Einde wedstrijd", "End of Match", "Einde reguliere speeltijd"]
+                    for ev in events
+                )
+
+                if period in ["FT", "Eindsignaal", "Afgelopen"] or status in ["FT", "FINISHED", "ENDED"] or has_end_marker:
                     is_finished = True
         except Exception:
             pass
 
-    # 2. Toon Live Scoreboard ÓF Volledig Rapport
     if is_finished:
         try:
             full_data = requests.get(url, timeout=5).json()
@@ -564,4 +587,4 @@ elif file_param:
         st.error(f"Fout bij laden via URL: {e}")
 
 else:
-    st.info("👋 Geen wedstrijd geselecteerd. Gebruik een unieke match URL (`?match=jouw_hash`) of upload een YAML-bestand in de Admin modus.")
+    st.info("👋 Geen wedstrijd geselecteerd. Gebruik een unieke match URL (`?match=jouw_hash`) of upload een YAML-bestand.")

@@ -1,0 +1,23 @@
+# -----------------------------------------
+# 1. Algemene OS- en editor-bestanden
+# -----------------------------------------
+# macOS
+.DS_Store
+._*
+
+# VS Code
+.vscode/
+
+# Python Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+
+# Python Cache & Overige
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Streamlit
+.streamlit/secrets.toml
