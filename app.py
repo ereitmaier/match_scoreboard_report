@@ -286,7 +286,6 @@ def generate_pdf_report(match_info, home_score, away_score, starters_h, subs_h, 
     fmt_val = match_info.get("format", 11)
     half_duration = match_info.get("half_duration", 45)
 
-    # 1. HTML Opstellingen
     def render_player_list_html(players, fallback_team_key):
         if players:
             items = []
@@ -310,12 +309,11 @@ def generate_pdf_report(match_info, home_score, away_score, starters_h, subs_h, 
     away_starters_html = render_player_list_html(starters_a, "away")
     away_subs_html = render_player_list_html(subs_a, "away") if subs_a else "<i>Geen wisselspelers</i>"
 
-    # 2. HTML Wedstrijdverloop
     events_html = ""
     for ev in events_info:
         t_str = ev.get("time", "")
         if ev.get("marker"):
-            events_html += f"<tr class='marker-row'><td colspan='4'><b><span class='emoji'>⏱️</span> {ev.get('event', '')}</b> ({ev.get('extra', '')})</td></tr>"
+            events_html += f"<tr class='marker-row'><td colspan='4'><b>[⏱] {ev.get('event', '')}</b> ({ev.get('extra', '')})</td></tr>"
         else:
             team_name = home_team if ev.get("team") == "home" else (away_team if ev.get("team") == "away" else "-")
             og = " (Eigen Doelpunt)" if ev.get("own_goal") else ""
@@ -324,16 +322,15 @@ def generate_pdf_report(match_info, home_score, away_score, starters_h, subs_h, 
             extra_val = str(ev.get('extra', ''))
             player_val = str(ev.get('player', ''))
 
-            icon_html = f"<span class='emoji'>{ev_icon}</span> " if ev_icon else ""
+            icon_html = f"{ev_icon} " if ev_icon else ""
             details_html = f"{clean_player_name(player_val)} {f'({extra_val})' if extra_val else ''}"
             events_html += f"<tr><td><b>{t_str}</b></td><td>{icon_html}{ev_name}{og}</td><td>{team_name}</td><td>{details_html}</td></tr>"
 
-    # 3. HTML Statistieken
     goalscorers_html = ""
     if goalscorers_list:
         for g in goalscorers_list:
             mins = f" ({', '.join(g['minutes'])})" if g['minutes'] else ""
-            goalscorers_html += f"<tr><td>{g['name']}</td><td>{g['team']}</td><td>{g['goals']} <span class='emoji'>⚽</span>{mins}</td></tr>"
+            goalscorers_html += f"<tr><td>{g['name']}</td><td>{g['team']}</td><td>{g['goals']} ⚽{mins}</td></tr>"
     else:
         goalscorers_html = "<tr><td colspan='3'><i>Geen doelpunten geregistreerd</i></td></tr>"
 
@@ -341,11 +338,10 @@ def generate_pdf_report(match_info, home_score, away_score, starters_h, subs_h, 
     if cards_list:
         for c in cards_list:
             times = ", ".join(c['times'])
-            cards_html += f"<tr><td>{c['name']}</td><td>{c['team']}</td><td>{c['yellow']} <span class='emoji'>🟨</span> / {c['red']} <span class='emoji'>🟥</span></td><td>{times}</td></tr>"
+            cards_html += f"<tr><td>{c['name']}</td><td>{c['team']}</td><td>{c['yellow']} 🟨 / {c['red']} 🟥</td><td>{times}</td></tr>"
     else:
         cards_html = "<tr><td colspan='4'><i>Geen kaarten geregistreerd</i></td></tr>"
 
-    # 4. HTML Gespeelde Minuten
     minutes_html = ""
     if not simple_mode and minutes_list:
         rows = ""
@@ -355,10 +351,10 @@ def generate_pdf_report(match_info, home_score, away_score, starters_h, subs_h, 
             rows += f"<tr><td>{num_label}</td><td>{p['clean_name']}</td><td>{team_label}</td><td><b>{int(p['total_minutes'])} min</b></td></tr>"
         
         minutes_html = f"""
-        <div class="section-title"><span class="emoji">⏱️</span> Gespeelde Minuten per Speler</div>
+        <div class="section-title">⏱ Gespeelde Minuten per Speler</div>
         <table class="data-table">
             <thead>
-                <tr><th>#</th><th>Speler</th><th>Team</th><th>Gespeelde Minuten</th></tr>
+                <tr><th style="width: 10%;">#</th><th style="width: 40%;">Speler</th><th style="width: 30%;">Team</th><th style="width: 20%;">Gespeelde Minuten</th></tr>
             </thead>
             <tbody>
                 {rows}
@@ -366,41 +362,102 @@ def generate_pdf_report(match_info, home_score, away_score, starters_h, subs_h, 
         </table>
         """
 
-    # 5. Geïsoleerde Font-CSS (Alleen emoji-klasse heeft 'Noto Color Emoji')
+    # 100% Veilige CSS zonder externe webfonts/network requests
     html_content = f"""
     <!DOCTYPE html>
     <html>
     <head>
         <meta charset="utf-8">
         <style>
-            @import url('https://fonts.googleapis.com/css2?family=Noto+Color+Emoji&display=swap');
-
-            @page {{ size: A4; margin: 15mm; }}
-            body {{ 
-                font-family: 'Helvetica', 'Arial', sans-serif; 
-                color: #333; 
-                margin: 0; 
-                padding: 0; 
-                letter-spacing: normal;
-                word-spacing: normal;
+            @page {{
+                size: A4;
+                margin: 15mm;
             }}
-            .emoji {{
-                font-family: 'Noto Color Emoji', sans-serif;
+            body {{
+                font-family: Arial, Helvetica, sans-serif;
+                color: #2c3e50;
+                margin: 0;
+                padding: 0;
+                font-size: 11px;
+                line-height: 1.3;
             }}
-            .header {{ text-align: center; background-color: #1e1e2e; color: #fff; padding: 15px; border-radius: 8px; }}
-            .score {{ font-size: 26px; font-weight: bold; margin: 5px 0; }}
-            .sub-info {{ font-size: 12px; color: #ccc; }}
-            .section-title {{ font-size: 16px; font-weight: bold; border-bottom: 2px solid #2980b9; margin-top: 20px; padding-bottom: 5px; color: #2d2d3f; page-break-after: avoid; }}
-            .page-break {{ page-break-before: always; }}
-            .teams-table {{ width: 100%; margin-top: 10px; border-collapse: separate; border-spacing: 10px 0; }}
-            .team-box {{ width: 50%; vertical-align: top; background: #f8f9fa; padding: 12px; border-radius: 6px; border: 1px solid #ddd; font-size: 12px; }}
-            .team-box h3 {{ margin-top: 0; margin-bottom: 8px; color: #2980b9; font-size: 14px; }}
-            table.data-table {{ width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 11px; }}
-            table.data-table th, table.data-table td {{ border: 1px solid #ddd; padding: 6px 8px; text-align: left; }}
-            table.data-table th {{ background-color: #2d2d3f; color: white; }}
-            .marker-row {{ background-color: #eaeded; text-align: center; }}
-            .stats-container {{ width: 100%; border-collapse: separate; border-spacing: 10px 0; margin-top: 10px; }}
-            .stats-box {{ vertical-align: top; width: 50%; }}
+            .header {{
+                text-align: center;
+                background-color: #1e1e2e;
+                color: #ffffff;
+                padding: 14px;
+                border-radius: 6px;
+            }}
+            .score {{
+                font-size: 22px;
+                font-weight: bold;
+            }}
+            .sub-info {{
+                font-size: 10px;
+                color: #bdc3c7;
+                margin-top: 4px;
+            }}
+            .section-title {{
+                font-size: 14px;
+                font-weight: bold;
+                border-bottom: 2px solid #2980b9;
+                margin-top: 18px;
+                margin-bottom: 8px;
+                padding-bottom: 3px;
+                color: #1e1e2e;
+                page-break-after: avoid;
+            }}
+            .page-break {{
+                page-break-before: always;
+            }}
+            .teams-table {{
+                width: 100%;
+                border-collapse: separate;
+                border-spacing: 10px 0;
+            }}
+            .team-box {{
+                width: 50%;
+                vertical-align: top;
+                background: #f8f9fa;
+                padding: 10px;
+                border-radius: 6px;
+                border: 1px solid #e2e8f0;
+            }}
+            .team-box h3 {{
+                margin-top: 0;
+                margin-bottom: 8px;
+                color: #2980b9;
+                font-size: 13px;
+            }}
+            table.data-table {{
+                width: 100%;
+                border-collapse: collapse;
+                margin-top: 6px;
+                font-size: 10px;
+            }}
+            table.data-table th, table.data-table td {{
+                border: 1px solid #cbd5e1;
+                padding: 5px 8px;
+                text-align: left;
+            }}
+            table.data-table th {{
+                background-color: #2d2d3f;
+                color: #ffffff;
+                font-weight: bold;
+            }}
+            .marker-row {{
+                background-color: #f1f5f9;
+                text-align: center;
+            }}
+            .stats-container {{
+                width: 100%;
+                border-collapse: separate;
+                border-spacing: 10px 0;
+            }}
+            .stats-box {{
+                vertical-align: top;
+                width: 50%;
+            }}
         </style>
     </head>
     <body>
@@ -410,41 +467,41 @@ def generate_pdf_report(match_info, home_score, away_score, starters_h, subs_h, 
         </div>
 
         <!-- Pagina 1: Opstellingen -->
-        <div class="section-title"><span class="emoji">👥</span> Opstellingen</div>
+        <div class="section-title">👥 Opstellingen</div>
         <table class="teams-table">
             <tr>
                 <td class="team-box">
-                    <h3><span class="emoji">🏠</span> {home_team}</h3>
-                    <b><span class="emoji">📋</span> Basis / Geregistreerd:</b><br>{home_starters_html}<br><br>
-                    <b><span class="emoji">🔄</span> Wissels:</b><br>{home_subs_html}
+                    <h3>🏠 {home_team}</h3>
+                    <b>📋 Basis / Geregistreerd:</b><br>{home_starters_html}<br><br>
+                    <b>🔄 Wissels:</b><br>{home_subs_html}
                 </td>
                 <td class="team-box">
-                    <h3><span class="emoji">🚩</span> {away_team}</h3>
-                    <b><span class="emoji">📋</span> Basis / Geregistreerd:</b><br>{away_starters_html}<br><br>
-                    <b><span class="emoji">🔄</span> Wissels:</b><br>{away_subs_html}
+                    <h3>🚩 {away_team}</h3>
+                    <b>📋 Basis / Geregistreerd:</b><br>{away_starters_html}<br><br>
+                    <b>🔄 Wissels:</b><br>{away_subs_html}
                 </td>
             </tr>
         </table>
 
         <!-- Pagina 2: Wedstrijdverloop -->
         <div class="page-break"></div>
-        <div class="section-title"><span class="emoji">📋</span> Wedstrijdverloop</div>
+        <div class="section-title">📋 Wedstrijdverloop</div>
         <table class="data-table">
             <thead>
-                <tr><th>Tijd</th><th>Gebeurtenis</th><th>Team</th><th>Speler / Details</th></tr>
+                <tr><th style="width: 15%;">Tijd</th><th style="width: 30%;">Gebeurtenis</th><th style="width: 25%;">Team</th><th style="width: 30%;">Speler / Details</th></tr>
             </thead>
             <tbody>
                 {events_html}
             </tbody>
         </table>
 
-        <!-- Pagina 3: Statistieken & Gespeelde Minuten -->
+        <!-- Pagina 3: Statistieken -->
         <div class="page-break"></div>
-        <div class="section-title"><span class="emoji">📊</span> Statistieken & Overzicht</div>
+        <div class="section-title">📊 Statistieken & Overzicht</div>
         <table class="stats-container">
             <tr>
                 <td class="stats-box">
-                    <b style="font-size: 13px;"><span class="emoji">⚽</span> Doelpuntenmakers</b>
+                    <b style="font-size: 12px;">⚽ Doelpuntenmakers</b>
                     <table class="data-table">
                         <thead>
                             <tr><th>Speler</th><th>Team</th><th>Goals</th></tr>
@@ -455,7 +512,7 @@ def generate_pdf_report(match_info, home_score, away_score, starters_h, subs_h, 
                     </table>
                 </td>
                 <td class="stats-box">
-                    <b style="font-size: 13px;"><span class="emoji">🟨</span> / <span class="emoji">🟥</span> Kaarten</b>
+                    <b style="font-size: 12px;">🟨 / 🟥 Kaarten</b>
                     <table class="data-table">
                         <thead>
                             <tr><th>Speler</th><th>Team</th><th>Kaarten</th><th>Details</th></tr>
@@ -477,7 +534,7 @@ def generate_pdf_report(match_info, home_score, away_score, starters_h, subs_h, 
         return HTML(string=html_content).write_pdf()
     else:
         return html_content.encode('utf-8')
-
+    
 # -----------------------------------------------------------------------------
 # Weergave 1: Live Scoreboard Component (met Auto FT Detectie)
 # -----------------------------------------------------------------------------
