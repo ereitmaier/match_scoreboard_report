@@ -283,6 +283,9 @@ def generate_pdf_report(match_info, home_score, away_score, starters_h, subs_h, 
     fmt_val = match_info.get("format", 11)
     half_duration = match_info.get("half_duration", 45)
 
+    # -------------------------------------------------------------------------
+    # 1. HTML opbouwen voor Wedstrijdverloop
+    # -------------------------------------------------------------------------
     events_html = ""
     for ev in events_info:
         t_str = ev.get("time", "")
@@ -300,6 +303,9 @@ def generate_pdf_report(match_info, home_score, away_score, starters_h, subs_h, 
             details_html = f"{clean_player_name(player_val)} {f'({extra_val})' if extra_val else ''}"
             events_html += f"<tr><td><b>{t_str}</b></td><td>{icon_html}{ev_name}{og}</td><td>{team_name}</td><td>{details_html}</td></tr>"
 
+    # -------------------------------------------------------------------------
+    # 2. HTML opbouwen voor Opstellingen
+    # -------------------------------------------------------------------------
     def render_player_list_html(players, fallback_team_key):
         if players:
             items = []
@@ -312,7 +318,6 @@ def generate_pdf_report(match_info, home_score, away_score, starters_h, subs_h, 
                     items.append(clean_player_name(p))
             return "<br>".join(items)
         else:
-            # Fallback op event players
             fallback_players = get_players_from_events(events_info, fallback_team_key)
             if fallback_players:
                 return "<br>".join([f"• {p}" for p in fallback_players])
@@ -324,6 +329,51 @@ def generate_pdf_report(match_info, home_score, away_score, starters_h, subs_h, 
     away_starters_html = render_player_list_html(starters_a, "away")
     away_subs_html = render_player_list_html(subs_a, "away") if subs_a else "<i>Geen wisselspelers</i>"
 
+    # -------------------------------------------------------------------------
+    # 3. HTML opbouwen voor Statistieken (Doelpuntenmakers & Kaarten)
+    # -------------------------------------------------------------------------
+    goalscorers_html = ""
+    if goalscorers_list:
+        for g in goalscorers_list:
+            mins = f" ({', '.join(g['minutes'])})" if g['minutes'] else ""
+            goalscorers_html += f"<tr><td>{g['name']}</td><td>{g['team']}</td><td>{g['goals']} ⚽{mins}</td></tr>"
+    else:
+        goalscorers_html = "<tr><td colspan='3'><i>Geen doelpunten geregistreerd</i></td></tr>"
+
+    cards_html = ""
+    if cards_list:
+        for c in cards_list:
+            times = ", ".join(c['times'])
+            cards_html += f"<tr><td>{c['name']}</td><td>{c['team']}</td><td>{c['yellow']} 🟨 / {c['red']} 🟥</td><td>{times}</td></tr>"
+    else:
+        cards_html = "<tr><td colspan='4'><i>Geen kaarten geregistreerd</i></td></tr>"
+
+    # -------------------------------------------------------------------------
+    # 4. HTML opbouwen voor Gespeelde Minuten
+    # -------------------------------------------------------------------------
+    minutes_html = ""
+    if not simple_mode and minutes_list:
+        rows = ""
+        for p in minutes_list:
+            team_label = home_team if p['team'] == 'home' else away_team
+            num_label = f"#{p['number']}" if p.get('number') else "-"
+            rows += f"<tr><td>{num_label}</td><td>{p['clean_name']}</td><td>{team_label}</td><td><b>{int(p['total_minutes'])} min</b></td></tr>"
+        
+        minutes_html = f"""
+        <div class="section-title">⏱️ Gespeelde Minuten per Speler</div>
+        <table class="data-table">
+            <thead>
+                <tr><th>#</th><th>Speler</th><th>Team</th><th>Gespeelde Minuten</th></tr>
+            </thead>
+            <tbody>
+                {rows}
+            </tbody>
+        </table>
+        """
+
+    # -------------------------------------------------------------------------
+    # 5. Volledige HTML Template
+    # -------------------------------------------------------------------------
     html_content = f"""
     <!DOCTYPE html>
     <html>
@@ -335,7 +385,7 @@ def generate_pdf_report(match_info, home_score, away_score, starters_h, subs_h, 
             .header {{ text-align: center; background-color: #1e1e2e; color: #fff; padding: 15px; border-radius: 8px; }}
             .score {{ font-size: 26px; font-weight: bold; margin: 5px 0; }}
             .sub-info {{ font-size: 12px; color: #ccc; }}
-            .section-title {{ font-size: 16px; font-weight: bold; border-bottom: 2px solid #2980b9; margin-top: 20px; padding-bottom: 5px; color: #2d2d3f; }}
+            .section-title {{ font-size: 16px; font-weight: bold; border-bottom: 2px solid #2980b9; margin-top: 20px; padding-bottom: 5px; color: #2d2d3f; page-break-after: avoid; }}
             .teams-table {{ width: 100%; margin-top: 10px; border-collapse: separate; border-spacing: 10px 0; }}
             .team-box {{ width: 50%; vertical-align: top; background: #f8f9fa; padding: 12px; border-radius: 6px; border: 1px solid #ddd; font-size: 12px; }}
             .team-box h3 {{ margin-top: 0; margin-bottom: 8px; color: #2980b9; font-size: 14px; }}
@@ -343,6 +393,8 @@ def generate_pdf_report(match_info, home_score, away_score, starters_h, subs_h, 
             table.data-table th, table.data-table td {{ border: 1px solid #ddd; padding: 6px 8px; text-align: left; }}
             table.data-table th {{ background-color: #2d2d3f; color: white; }}
             .marker-row {{ background-color: #eaeded; text-align: center; }}
+            .stats-container {{ width: 100%; border-collapse: separate; border-spacing: 10px 0; margin-top: 10px; }}
+            .stats-box {{ vertical-align: top; width: 50%; }}
         </style>
     </head>
     <body>
@@ -350,6 +402,36 @@ def generate_pdf_report(match_info, home_score, away_score, starters_h, subs_h, 
             <div class="score">{home_team} {home_score} - {away_score} {away_team}</div>
             <div class="sub-info">Datum: {match_date} | Categorie {category} | Wedstrijdvorm: {fmt_val}v{fmt_val} | Speeltijd: 2x {half_duration} min</div>
         </div>
+
+        <div class="section-title">📊 Statistieken & Overzicht</div>
+        <table class="stats-container">
+            <tr>
+                <td class="stats-box">
+                    <b style="font-size: 13px;">⚽ Doelpuntenmakers</b>
+                    <table class="data-table">
+                        <thead>
+                            <tr><th>Speler</th><th>Team</th><th>Goals</th></tr>
+                        </thead>
+                        <tbody>
+                            {goalscorers_html}
+                        </tbody>
+                    </table>
+                </td>
+                <td class="stats-box">
+                    <b style="font-size: 13px;">🟨 / 🟥 Kaarten</b>
+                    <table class="data-table">
+                        <thead>
+                            <tr><th>Speler</th><th>Team</th><th>Kaarten</th><th>Details</th></tr>
+                        </thead>
+                        <tbody>
+                            {cards_html}
+                        </tbody>
+                    </table>
+                </td>
+            </tr>
+        </table>
+
+        {minutes_html}
 
         <div class="section-title">👥 Opstellingen</div>
         <table class="teams-table">
@@ -379,11 +461,12 @@ def generate_pdf_report(match_info, home_score, away_score, starters_h, subs_h, 
     </body>
     </html>
     """
+
     if WEASYPRINT_AVAILABLE:
         return HTML(string=html_content).write_pdf()
     else:
         return html_content.encode('utf-8')
-
+    
 # -----------------------------------------------------------------------------
 # Weergave 1: Live Scoreboard Component (met Auto FT Detectie)
 # -----------------------------------------------------------------------------
