@@ -386,6 +386,7 @@ def generate_pdf_report(match_info, home_score, away_score, starters_h, subs_h, 
             .score {{ font-size: 26px; font-weight: bold; margin: 5px 0; }}
             .sub-info {{ font-size: 12px; color: #ccc; }}
             .section-title {{ font-size: 16px; font-weight: bold; border-bottom: 2px solid #2980b9; margin-top: 20px; padding-bottom: 5px; color: #2d2d3f; page-break-after: avoid; }}
+            .page-break {{ page-break-before: always; }}
             .teams-table {{ width: 100%; margin-top: 10px; border-collapse: separate; border-spacing: 10px 0; }}
             .team-box {{ width: 50%; vertical-align: top; background: #f8f9fa; padding: 12px; border-radius: 6px; border: 1px solid #ddd; font-size: 12px; }}
             .team-box h3 {{ margin-top: 0; margin-bottom: 8px; color: #2980b9; font-size: 14px; }}
@@ -433,6 +434,7 @@ def generate_pdf_report(match_info, home_score, away_score, starters_h, subs_h, 
 
         {minutes_html}
 
+        <div class="page-break"></div>
         <div class="section-title">👥 Opstellingen</div>
         <table class="teams-table">
             <tr>
@@ -449,6 +451,7 @@ def generate_pdf_report(match_info, home_score, away_score, starters_h, subs_h, 
             </tr>
         </table>
 
+        <div class="page-break"></div>
         <div class="section-title">📋 Wedstrijdverloop</div>
         <table class="data-table">
             <thead>
