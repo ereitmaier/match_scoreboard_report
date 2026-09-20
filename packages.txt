@@ -3,3 +3,4 @@ libpangoft2-1.0-0
 libgobject-2.0-0
 libharfbuzz0b
 fontconfig
+fonts-noto-color-emoji
