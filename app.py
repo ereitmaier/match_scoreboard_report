@@ -284,27 +284,7 @@ def generate_pdf_report(match_info, home_score, away_score, starters_h, subs_h, 
     half_duration = match_info.get("half_duration", 45)
 
     # -------------------------------------------------------------------------
-    # 1. HTML opbouwen voor Wedstrijdverloop
-    # -------------------------------------------------------------------------
-    events_html = ""
-    for ev in events_info:
-        t_str = ev.get("time", "")
-        if ev.get("marker"):
-            events_html += f"<tr class='marker-row'><td colspan='4'><b>⏱️ {ev.get('event', '')}</b> ({ev.get('extra', '')})</td></tr>"
-        else:
-            team_name = home_team if ev.get("team") == "home" else (away_team if ev.get("team") == "away" else "-")
-            og = " (Eigen Doelpunt)" if ev.get("own_goal") else ""
-            ev_name = ev.get('event', '')
-            ev_icon = ev.get('icon', '')
-            extra_val = str(ev.get('extra', ''))
-            player_val = str(ev.get('player', ''))
-
-            icon_html = f"{ev_icon} " if ev_icon else ""
-            details_html = f"{clean_player_name(player_val)} {f'({extra_val})' if extra_val else ''}"
-            events_html += f"<tr><td><b>{t_str}</b></td><td>{icon_html}{ev_name}{og}</td><td>{team_name}</td><td>{details_html}</td></tr>"
-
-    # -------------------------------------------------------------------------
-    # 2. HTML opbouwen voor Opstellingen
+    # 1. HTML opbouwen voor Opstellingen
     # -------------------------------------------------------------------------
     def render_player_list_html(players, fallback_team_key):
         if players:
@@ -328,6 +308,26 @@ def generate_pdf_report(match_info, home_score, away_score, starters_h, subs_h, 
 
     away_starters_html = render_player_list_html(starters_a, "away")
     away_subs_html = render_player_list_html(subs_a, "away") if subs_a else "<i>Geen wisselspelers</i>"
+
+    # -------------------------------------------------------------------------
+    # 2. HTML opbouwen voor Wedstrijdverloop
+    # -------------------------------------------------------------------------
+    events_html = ""
+    for ev in events_info:
+        t_str = ev.get("time", "")
+        if ev.get("marker"):
+            events_html += f"<tr class='marker-row'><td colspan='4'><b>⏱️ {ev.get('event', '')}</b> ({ev.get('extra', '')})</td></tr>"
+        else:
+            team_name = home_team if ev.get("team") == "home" else (away_team if ev.get("team") == "away" else "-")
+            og = " (Eigen Doelpunt)" if ev.get("own_goal") else ""
+            ev_name = ev.get('event', '')
+            ev_icon = ev.get('icon', '')
+            extra_val = str(ev.get('extra', ''))
+            player_val = str(ev.get('player', ''))
+
+            icon_html = f"{ev_icon} " if ev_icon else ""
+            details_html = f"{clean_player_name(player_val)} {f'({extra_val})' if extra_val else ''}"
+            events_html += f"<tr><td><b>{t_str}</b></td><td>{icon_html}{ev_name}{og}</td><td>{team_name}</td><td>{details_html}</td></tr>"
 
     # -------------------------------------------------------------------------
     # 3. HTML opbouwen voor Statistieken (Doelpuntenmakers & Kaarten)
@@ -372,7 +372,7 @@ def generate_pdf_report(match_info, home_score, away_score, starters_h, subs_h, 
         """
 
     # -------------------------------------------------------------------------
-    # 5. Volledige HTML Template
+    # 5. Volledige HTML Template met nieuwe volgorde en pagina-einden
     # -------------------------------------------------------------------------
     html_content = f"""
     <!DOCTYPE html>
@@ -404,6 +404,37 @@ def generate_pdf_report(match_info, home_score, away_score, starters_h, subs_h, 
             <div class="sub-info">Datum: {match_date} | Categorie {category} | Wedstrijdvorm: {fmt_val}v{fmt_val} | Speeltijd: 2x {half_duration} min</div>
         </div>
 
+        <!-- Pagina 1: Opstellingen -->
+        <div class="section-title">👥 Opstellingen</div>
+        <table class="teams-table">
+            <tr>
+                <td class="team-box">
+                    <h3>🏠 {home_team}</h3>
+                    <b>Basis / Geregistreerd:</b><br>{home_starters_html}<br><br>
+                    <b>Wissels:</b><br>{home_subs_html}
+                </td>
+                <td class="team-box">
+                    <h3>🚩 {away_team}</h3>
+                    <b>Basis / Geregistreerd:</b><br>{away_starters_html}<br><br>
+                    <b>Wissels:</b><br>{away_subs_html}
+                </td>
+            </tr>
+        </table>
+
+        <!-- Pagina 2: Wedstrijdverloop -->
+        <div class="page-break"></div>
+        <div class="section-title">📋 Wedstrijdverloop</div>
+        <table class="data-table">
+            <thead>
+                <tr><th>Tijd</th><th>Gebeurtenis</th><th>Team</th><th>Speler / Details</th></tr>
+            </thead>
+            <tbody>
+                {events_html}
+            </tbody>
+        </table>
+
+        <!-- Pagina 3: Statistieken & Gespeelde Minuten -->
+        <div class="page-break"></div>
         <div class="section-title">📊 Statistieken & Overzicht</div>
         <table class="stats-container">
             <tr>
@@ -433,34 +464,6 @@ def generate_pdf_report(match_info, home_score, away_score, starters_h, subs_h, 
         </table>
 
         {minutes_html}
-
-        <div class="page-break"></div>
-        <div class="section-title">👥 Opstellingen</div>
-        <table class="teams-table">
-            <tr>
-                <td class="team-box">
-                    <h3>🏠 {home_team}</h3>
-                    <b>Basis / Geregistreerd:</b><br>{home_starters_html}<br><br>
-                    <b>Wissels:</b><br>{home_subs_html}
-                </td>
-                <td class="team-box">
-                    <h3>🚩 {away_team}</h3>
-                    <b>Basis / Geregistreerd:</b><br>{away_starters_html}<br><br>
-                    <b>Wissels:</b><br>{away_subs_html}
-                </td>
-            </tr>
-        </table>
-
-        <div class="page-break"></div>
-        <div class="section-title">📋 Wedstrijdverloop</div>
-        <table class="data-table">
-            <thead>
-                <tr><th>Tijd</th><th>Gebeurtenis</th><th>Team</th><th>Speler / Details</th></tr>
-            </thead>
-            <tbody>
-                {events_html}
-            </tbody>
-        </table>
     </body>
     </html>
     """
