@@ -11,7 +11,7 @@ try:
 except Exception:
     WEASYPRINT_AVAILABLE = False
 
-APP_VERSION = "v2.1.3 - PDF Lineup Fix"
+APP_VERSION = "v2.1.4 - PDF Icons & Styling Fix"
 
 st.set_page_config(
     page_title=f"Matchcenter & Report ({APP_VERSION})",
@@ -275,6 +275,23 @@ def get_players_from_events(events_info, team_key):
                 if m_out: found_players.add(clean_player_name(m_out.group(1)))
     return sorted(list(found_players))
 
+def get_event_icon(ev_name, ev_icon):
+    if ev_icon and ev_icon.strip():
+        return ev_icon.strip()
+    
+    name_lower = str(ev_name).lower()
+    if "doelpunt" in name_lower or "goal" in name_lower:
+        return "⚽"
+    elif "penalty" in name_lower:
+        return "🎯"
+    elif "geel" in name_lower or "gele kaart" in name_lower:
+        return "🟨"
+    elif "rood" in name_lower or "rode kaart" in name_lower:
+        return "🟥"
+    elif "wissel" in name_lower or "subst" in name_lower:
+        return "🔄"
+    return "📌"
+
 def generate_pdf_report(match_info, home_score, away_score, starters_h, subs_h, starters_a, subs_a, events_info, minutes_list, goalscorers_list, cards_list, simple_mode=False):
     home_team = match_info.get("home", "Thuisploeg")
     away_team = match_info.get("away", "Uitploeg")
@@ -321,13 +338,12 @@ def generate_pdf_report(match_info, home_score, away_score, starters_h, subs_h, 
             team_name = home_team if ev.get("team") == "home" else (away_team if ev.get("team") == "away" else "-")
             og = " (Eigen Doelpunt)" if ev.get("own_goal") else ""
             ev_name = ev.get('event', '')
-            ev_icon = ev.get('icon', '')
+            icon = get_event_icon(ev_name, ev.get('icon', ''))
             extra_val = str(ev.get('extra', ''))
             player_val = str(ev.get('player', ''))
 
-            icon_html = f"{ev_icon} " if ev_icon else ""
             details_html = f"{clean_player_name(player_val)} {f'({extra_val})' if extra_val else ''}"
-            events_html += f"<tr><td><b>{t_str}</b></td><td>{icon_html}{ev_name}{og}</td><td>{team_name}</td><td>{details_html}</td></tr>"
+            events_html += f"<tr><td><b>{t_str}</b></td><td>{icon} {ev_name}{og}</td><td>{team_name}</td><td>{details_html}</td></tr>"
 
     # -------------------------------------------------------------------------
     # 3. HTML opbouwen voor Statistieken (Doelpuntenmakers & Kaarten)
@@ -372,7 +388,7 @@ def generate_pdf_report(match_info, home_score, away_score, starters_h, subs_h, 
         """
 
     # -------------------------------------------------------------------------
-    # 5. Volledige HTML Template met nieuwe volgorde en pagina-einden
+    # 5. Volledige HTML Template met emoji font-fallback support
     # -------------------------------------------------------------------------
     html_content = f"""
     <!DOCTYPE html>
@@ -381,7 +397,7 @@ def generate_pdf_report(match_info, home_score, away_score, starters_h, subs_h, 
         <meta charset="utf-8">
         <style>
             @page {{ size: A4; margin: 15mm; }}
-            body {{ font-family: 'Helvetica', 'Arial', sans-serif; color: #333; margin: 0; padding: 0; }}
+            body {{ font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', 'DejaVu Sans', 'Helvetica', 'Arial', sans-serif; color: #333; margin: 0; padding: 0; }}
             .header {{ text-align: center; background-color: #1e1e2e; color: #fff; padding: 15px; border-radius: 8px; }}
             .score {{ font-size: 26px; font-weight: bold; margin: 5px 0; }}
             .sub-info {{ font-size: 12px; color: #ccc; }}
@@ -410,13 +426,13 @@ def generate_pdf_report(match_info, home_score, away_score, starters_h, subs_h, 
             <tr>
                 <td class="team-box">
                     <h3>🏠 {home_team}</h3>
-                    <b>Basis / Geregistreerd:</b><br>{home_starters_html}<br><br>
-                    <b>Wissels:</b><br>{home_subs_html}
+                    <b>📋 Basis / Geregistreerd:</b><br>{home_starters_html}<br><br>
+                    <b>🔄 Wissels:</b><br>{home_subs_html}
                 </td>
                 <td class="team-box">
                     <h3>🚩 {away_team}</h3>
-                    <b>Basis / Geregistreerd:</b><br>{away_starters_html}<br><br>
-                    <b>Wissels:</b><br>{away_subs_html}
+                    <b>📋 Basis / Geregistreerd:</b><br>{away_starters_html}<br><br>
+                    <b>🔄 Wissels:</b><br>{away_subs_html}
                 </td>
             </tr>
         </table>
@@ -533,7 +549,7 @@ def render_live_scoreboard(match_key):
         team_naam = data.get('home') if ev.get('team') == 'home' else data.get('away')
         actie = ev.get('event')
         extra = ev.get('extra', '')
-        icon = ev.get('icon', '📌')
+        icon = get_event_icon(actie, ev.get('icon', ''))
 
         if actie in ["Doelpunt", "Goal"]:
             st.success(f"⚽ {minuut} **GOAL {team_naam}!** — {speler} " + (f"*(Assist: {extra})*" if extra else ""))
@@ -630,6 +646,7 @@ def render_full_report(data):
         if events_info:
             log_data = []
             for ev in events_info:
+                icon = get_event_icon(ev.get('event', ''), ev.get('icon', ''))
                 if ev.get("marker"):
                     log_data.append({
                         "Tijd": ev.get("time", ""),
@@ -643,7 +660,7 @@ def render_full_report(data):
                     og_label = " (Eigen Doelpunt)" if ev.get("own_goal") else ""
                     log_data.append({
                         "Tijd": ev.get("time", ""),
-                        "Gebeurtenis": f"{ev.get('icon', '')} {ev.get('event', '')}{og_label}",
+                        "Gebeurtenis": f"{icon} {ev.get('event', '')}{og_label}",
                         "Team": t_label,
                         "Speler": clean_player_name(ev.get("player", "-")),
                         "Details": ev.get("extra", "")
@@ -655,10 +672,10 @@ def render_full_report(data):
         with col_h:
             st.subheader(f"🏠 {home_team}")
             if starters_h or subs_h:
-                st.markdown("**Begin-opstelling:**")
+                st.markdown("**📋 Begin-opstelling:**")
                 for p in starters_h: st.write(f"• #{p.get('number', '')} {clean_player_name(p.get('name', ''))}")
                 if subs_h:
-                    st.markdown("**Wissels:**")
+                    st.markdown("**🔄 Wissels:**")
                     for p in subs_h: st.write(f"• #{p.get('number', '')} {clean_player_name(p.get('name', ''))}")
             else:
                 event_players_h = get_players_from_events(events_info, "home")
@@ -671,10 +688,10 @@ def render_full_report(data):
         with col_a:
             st.subheader(f"🚩 {away_team}")
             if starters_a or subs_a:
-                st.markdown("**Begin-opstelling:**")
+                st.markdown("**📋 Begin-opstelling:**")
                 for p in starters_a: st.write(f"• #{p.get('number', '')} {clean_player_name(p.get('name', ''))}")
                 if subs_a:
-                    st.markdown("**Wissels:**")
+                    st.markdown("**🔄 Wissels:**")
                     for p in subs_a: st.write(f"• #{p.get('number', '')} {clean_player_name(p.get('name', ''))}")
             else:
                 event_players_a = get_players_from_events(events_info, "away")
